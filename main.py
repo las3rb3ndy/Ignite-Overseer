@@ -5,6 +5,7 @@ import logging
 from dotenv import load_dotenv
 import os
 import json
+import asyncio
 from datetime import datetime, timezone
 
 load_dotenv()
@@ -15,7 +16,7 @@ VERIFY_ROLE_NAME = os.getenv('VERIFY_ROLE_NAME', 'Verified')
 VERIFY_EMOJI = os.getenv('VERIFY_EMOJI', '✅')
 
 # Comma-separated list of role names allowed to use staff commands (/warn, /warnings)
-STAFF_ROLE_NAMES = [r.strip() for r in os.getenv('STAFF_ROLES', '[STAFF],[EXECUTIVES]').split(',') if r.strip()]
+STAFF_ROLE_NAMES = [r.strip() for r in os.getenv('STAFF_ROLES', 'Staff,Admin,Moderator').split(',') if r.strip()]
 
 WARNINGS_FILE = 'warnings.json'
 
@@ -256,6 +257,76 @@ async def staff_command_error(interaction: discord.Interaction, error: app_comma
         )
     else:
         raise error
+
+
+# --- /kick ---
+@bot.tree.command(name="kick", description="Kick a member from the server")
+@app_commands.describe(member="The member to kick", reason="Reason for the kick")
+@app_commands.checks.has_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role:
+        return await interaction.response.send_message("You can't kick someone with an equal or higher role.", ephemeral=True)
+    await member.kick(reason=reason)
+    embed = discord.Embed(
+        title="Member Kicked",
+        description=f"{member.mention} was kicked.\n**Reason:** {reason}",
+        color=discord.Color.orange()
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# --- /ban ---
+@bot.tree.command(name="ban", description="Ban a member from the server")
+@app_commands.describe(member="The member to ban", reason="Reason for the ban")
+@app_commands.checks.has_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role:
+        return await interaction.response.send_message("You can't ban someone with an equal or higher role.", ephemeral=True)
+    await member.ban(reason=reason)
+    embed = discord.Embed(
+        title="Member Banned",
+        description=f"{member.mention} was banned.\n**Reason:** {reason}",
+        color=discord.Color.red()
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# --- /tban (temporary ban) ---
+@bot.tree.command(name="tban", description="Temporarily ban a member")
+@app_commands.describe(member="The member to ban", duration_minutes="How long to ban them for, in minutes", reason="Reason for the ban")
+@app_commands.checks.has_permissions(ban_members=True)
+async def tban(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "No reason provided"):
+    if member.top_role >= interaction.user.top_role:
+        return await interaction.response.send_message("You can't ban someone with an equal or higher role.", ephemeral=True)
+    guild = interaction.guild
+    user_id = member.id
+    await member.ban(reason=f"{reason} (temp ban: {duration_minutes}m)")
+    embed = discord.Embed(
+        title="Member Temporarily Banned",
+        description=f"{member.mention} was banned for **{duration_minutes} minutes**.\n**Reason:** {reason}",
+        color=discord.Color.dark_red()
+    )
+    await interaction.response.send_message(embed=embed)
+
+    async def unban_later():
+        await asyncio.sleep(duration_minutes * 60)
+        try:
+            await guild.unban(discord.Object(id=user_id), reason="Temp ban expired")
+        except discord.NotFound:
+            pass  # already unbanned manually
+
+    asyncio.create_task(unban_later())
+
+
+# --- Shared error handler for missing permissions ---
+@kick.error
+@ban.error
+@tban.error
+async def mod_command_error(interaction: discord.Interaction, error):
+    if isinstance(error, app_commands.MissingPermissions):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Something went wrong: {error}", ephemeral=True)
 
 
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
