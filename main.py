@@ -317,11 +317,21 @@ async def tban(interaction: discord.Interaction, member: discord.Member, duratio
 
     asyncio.create_task(unban_later())
 
+# --- /purge ---
+@bot.tree.command(name="purge", description="Delete a number of recent messages from this channel")
+@app_commands.describe(amount="How many messages to delete (1-100)")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def purge(interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]):
+    await interaction.response.defer(ephemeral=True)
+    deleted = await interaction.channel.purge(limit=amount)
+    await interaction.followup.send(f"Deleted {len(deleted)} message(s).", ephemeral=True)
+
 
 # --- Shared error handler for missing permissions ---
 @kick.error
 @ban.error
 @tban.error
+@purge.error
 async def mod_command_error(interaction: discord.Interaction, error):
     if isinstance(error, app_commands.MissingPermissions):
         await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
