@@ -339,4 +339,79 @@ async def mod_command_error(interaction: discord.Interaction, error):
         await interaction.response.send_message(f"Something went wrong: {error}", ephemeral=True)
 
 
+# --- /embed ---
+# Paste JSON straight from Discohook (discohook.org -> build your embed -> JSON Editor)
+# Either type it into json_text, or attach a .json file — file takes priority if both given.
+
+@bot.tree.command(name="embed", description="Post an embed from Discohook-exported JSON")
+@app_commands.describe(
+    json_text="Paste the JSON from Discohook here (leave empty if attaching a file)",
+    file="Or attach a .json file exported from Discohook"
+)
+@app_commands.checks.has_any_role(*STAFF_ROLE_NAMES)
+async def embed_cmd(
+    interaction: discord.Interaction,
+    json_text: str = None,
+    file: discord.Attachment = None
+):
+    raw = None
+
+    if file is not None:
+        if not file.filename.endswith(".json"):
+            return await interaction.response.send_message("That attachment isn't a .json file.", ephemeral=True)
+        raw_bytes = await file.read()
+        raw = raw_bytes.decode("utf-8")
+    elif json_text:
+        raw = json_text.strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+    if not raw:
+        return await interaction.response.send_message(
+            "Paste JSON in `json_text` or attach a `.json` file.", ephemeral=True
+        )
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        return await interaction.response.send_message(f"That JSON didn't parse: `{e}`", ephemeral=True)
+
+    # Discohook exports either a single embed dict, or a full message dict with "embeds": [...]
+    if isinstance(data, dict) and "embeds" in data:
+        content = data.get("content")
+        embed_dicts = data.get("embeds", [])
+    elif isinstance(data, list):
+        content = None
+        embed_dicts = data
+    elif isinstance(data, dict):
+        content = None
+        embed_dicts = [data]
+    else:
+        return await interaction.response.send_message("No embed data found in that JSON.", ephemeral=True)
+
+    if not embed_dicts:
+        return await interaction.response.send_message("No embed data found in that JSON.", ephemeral=True)
+    if len(embed_dicts) > 10:
+        embed_dicts = embed_dicts[:10]  # Discord's per-message cap
+
+    try:
+        built_embeds = [discord.Embed.from_dict(e) for e in embed_dicts]
+    except Exception as e:
+        return await interaction.response.send_message(f"Couldn't build the embed(s): `{e}`", ephemeral=True)
+
+    await interaction.response.send_message("Posted.", ephemeral=True)
+    await interaction.channel.send(content=content or None, embeds=built_embeds)
+
+
+@embed_cmd.error
+async def embed_cmd_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.MissingAnyRole):
+        await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"Something went wrong: {error}", ephemeral=True)
+
+
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
