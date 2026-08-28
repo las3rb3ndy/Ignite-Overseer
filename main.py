@@ -16,7 +16,7 @@ VERIFY_ROLE_NAME = os.getenv('VERIFY_ROLE_NAME', 'Verified')
 VERIFY_EMOJI = os.getenv('VERIFY_EMOJI', '✅')
 
 # Comma-separated list of role names allowed to use staff commands (/warn, /warnings)
-STAFF_ROLE_NAMES = [r.strip() for r in os.getenv('STAFF_ROLES', 'Staff,Admin,Moderator').split(',') if r.strip()]
+STAFF_ROLE_NAMES = [r.strip() for r in os.getenv('STAFF_ROLES', '[STAFF],[EXECUTIVES]').split(',') if r.strip()]
 
 WARNINGS_FILE = 'warnings.json'
 
